@@ -1,0 +1,66 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / coverage / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --- Project data (synthetic only, never commit) ---
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# --- Secrets / env ---
+.env
+*.env
+!.env.example
+
+# --- MLflow ---
+mlruns/
+mlartifacts/
+
+# --- BentoML ---
+bentoml/
+
+# --- Model / report artifacts (regenerable via `make train`) ---
+models/
+reports/
+
+# --- Synthea jar (downloaded dependency, large) ---
+*.jar
+
+# --- Stray build / run logs ---
+*.log
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

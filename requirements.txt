@@ -1,0 +1,38 @@
+# Runtime + dev dependencies for ClinOps.
+# Pinning intentionally loose for a portfolio scaffold; pin exact versions before any real run.
+
+# --- Core / data ---
+pandas
+numpy
+pyarrow          # parquet I/O for the interim cohort
+pydantic
+pydantic-settings
+python-dotenv
+
+# --- FHIR ---
+fhir.resources
+
+# --- ML ---
+scikit-learn
+lightgbm         # gradient-boosting baseline
+torch
+shap             # tree-model feature attribution
+matplotlib       # calibration / SHAP diagnostic plots
+
+# --- Experiment tracking / registry ---
+mlflow           # tracking server + model registry (the pipeline "spine")
+boto3            # MinIO / S3 artifact store
+
+# --- Serving ---
+bentoml
+
+# --- Orchestration ---
+apache-airflow
+prefect
+kfp
+
+# --- Dev / tooling ---
+ruff
+mypy
+pytest
+pytest-cov

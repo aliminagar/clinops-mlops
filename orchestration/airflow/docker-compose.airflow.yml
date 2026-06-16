@@ -1,0 +1,49 @@
+# Airflow stack for running the ClinOps DAG locally (scheduler + webserver + metadata DB).
+# The DAG wraps src/clinops/tasks/pipeline_tasks.py — it does not re-implement pipeline logic.
+# Skeleton only; flesh out images, volumes, and env before a real run. Brought up via `make airflow-up`.
+
+services:
+  airflow-postgres:
+    image: postgres:16
+    container_name: clinops-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+
+  airflow-webserver:
+    image: apache/airflow:2.9.0
+    container_name: clinops-airflow-webserver
+    depends_on:
+      - airflow-postgres
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:change-me@airflow-postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      # Point Airflow at the shared pipeline core + MLflow tracking server.
+      MLFLOW_TRACKING_URI: http://host.docker.internal:5000
+    command: webserver
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      # Mount the clinops package so DAG tasks can import pipeline_tasks.
+      - ../../src:/opt/airflow/src
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.0
+    container_name: clinops-airflow-scheduler
+    depends_on:
+      - airflow-postgres
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:change-me@airflow-postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      MLFLOW_TRACKING_URI: http://host.docker.internal:5000
+    command: scheduler
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ../../src:/opt/airflow/src
+
+volumes:
+  airflow-db:

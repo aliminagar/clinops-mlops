@@ -1,0 +1,28 @@
+# BentoML build spec for the ClinOps readmission service.
+# Build:  bentoml build
+# Serve:  bentoml serve clinops.serving.bentoml_service:svc
+service: "clinops.serving.bentoml_service:svc"
+name: clinops-readmission
+labels:
+  owner: clinops
+  stage: serving
+  project: clinops-readmission
+include:
+  - "src/clinops/**/*.py"
+  - "pyproject.toml"
+python:
+  packages:
+    - scikit-learn
+    - lightgbm
+    - torch          # the champion may be the PyTorch challenger
+    - mlflow
+    - pandas
+    - pydantic
+    - pydantic-settings
+envs:
+  # The champion is resolved from the MLflow registry at startup; point the
+  # service at the tracking store (a local mlruns/ dir by default).
+  - name: MLFLOW_TRACKING_URI
+    value: mlruns
+  - name: MLFLOW_ALLOW_FILE_STORE
+    value: "true"
