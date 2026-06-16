@@ -1,6 +1,37 @@
-# Airflow stack for running the ClinOps DAG locally (scheduler + webserver + metadata DB).
-# The DAG wraps src/clinops/tasks/pipeline_tasks.py — it does not re-implement pipeline logic.
-# Skeleton only; flesh out images, volumes, and env before a real run. Brought up via `make airflow-up`.
+# Airflow stack for running the ClinOps DAG locally (LocalExecutor).
+# The DAG wraps src/clinops/tasks/pipeline_tasks.py — it does not re-implement
+# pipeline logic. Bring up via `make airflow-up`, then trigger `clinops_pipeline`.
+#
+# The clinops package is mounted at /opt/airflow/src and added to PYTHONPATH so
+# DAG tasks can `import clinops`. The ML runtime deps are installed at container
+# start via _PIP_ADDITIONAL_REQUIREMENTS; for faster, reproducible startup bake
+# them into a custom airflow image instead.
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.0
+  environment: &airflow-env
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:change-me@airflow-postgres/airflow
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__FERNET_KEY: ""
+    # Make the clinops package importable + point at the MLflow tracking server.
+    PYTHONPATH: /opt/airflow/src
+    MLFLOW_TRACKING_URI: http://host.docker.internal:5000
+    MLFLOW_ALLOW_FILE_STORE: "true"
+    # Install the clinops ML runtime at container start (bake into an image for speed).
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      pandas pyarrow pydantic pydantic-settings python-dotenv fhir.resources
+      scikit-learn lightgbm torch mlflow bentoml shap
+  volumes:
+    - ./dags:/opt/airflow/dags
+    # Mount the clinops package + data/registry so DAG tasks resolve and run.
+    - ../../src:/opt/airflow/src
+    - ../../data:/opt/airflow/data
+    - ../../mlruns:/opt/airflow/mlruns
+  depends_on:
+    airflow-postgres:
+      condition: service_healthy
 
 services:
   airflow-postgres:
@@ -12,38 +43,47 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  # One-shot: initialize the metadata DB and create an admin user.
+  airflow-init:
+    <<: *airflow-common
+    container_name: clinops-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - >-
+        airflow db migrate &&
+        airflow users create --username admin --password admin
+        --firstname Admin --lastname User --role Admin --email admin@example.com
+    restart: on-failure
 
   airflow-webserver:
-    image: apache/airflow:2.9.0
+    <<: *airflow-common
     container_name: clinops-airflow-webserver
-    depends_on:
-      - airflow-postgres
-    environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:change-me@airflow-postgres/airflow
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      # Point Airflow at the shared pipeline core + MLflow tracking server.
-      MLFLOW_TRACKING_URI: http://host.docker.internal:5000
     command: webserver
     ports:
       - "8080:8080"
-    volumes:
-      - ./dags:/opt/airflow/dags
-      # Mount the clinops package so DAG tasks can import pipeline_tasks.
-      - ../../src:/opt/airflow/src
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   airflow-scheduler:
-    image: apache/airflow:2.9.0
+    <<: *airflow-common
     container_name: clinops-airflow-scheduler
-    depends_on:
-      - airflow-postgres
-    environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:change-me@airflow-postgres/airflow
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      MLFLOW_TRACKING_URI: http://host.docker.internal:5000
     command: scheduler
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ../../src:/opt/airflow/src
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   airflow-db:

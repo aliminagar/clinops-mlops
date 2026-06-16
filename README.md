@@ -161,6 +161,34 @@ The endpoint returns the calibrated **probability** plus the **F2 screening
 decision** (`readmission_flag = probability >= threshold`) and the served model
 version — never just the flag. (Response values above are illustrative.)
 
+## Orchestration — Airflow
+
+The same `pipeline_tasks` core is **wrapped, never re-implemented**, by an Airflow
+DAG ([`clinops_dag.py`](orchestration/airflow/dags/clinops_dag.py)) that runs the
+seven steps in order — extract → parse_fhir → build_features → train → evaluate →
+promote → package — as a linear, manual-trigger graph (`schedule=None`,
+`catchup=False`, no retries).
+
+```bash
+# Bring up the Airflow stack (postgres + db init + webserver + scheduler)
+make airflow-up
+# equivalently:
+docker compose -f orchestration/airflow/docker-compose.airflow.yml up -d
+
+# UI at http://localhost:8080 (admin / admin). Trigger a run:
+docker compose -f orchestration/airflow/docker-compose.airflow.yml \
+  exec airflow-scheduler airflow dags trigger clinops_pipeline
+```
+
+DAG **structure** is validated by [`tests/test_airflow_dag.py`](tests/test_airflow_dag.py)
+(via `DagBag` — no live cluster). Airflow does not run on Windows-native, so those
+tests `importorskip` Airflow locally and run inside the container / CI.
+
+> Every step in the chain is implemented (`promote` selection/registration lives
+> in [`registry/promote.py`](src/clinops/registry/promote.py)), so the DAG can run
+> end to end. It is marked *Written* (not *Done*) only because it has not yet been
+> validated on a live cluster.
+
 ## Roadmap
 
 | Component | Status | Milestone |
@@ -174,7 +202,7 @@ version — never just the flag. (Response values above are illustrative.)
 | F2 threshold selection | ✅ Done | Weekend-2 core |
 | BentoML `/predict` serving | ✅ Done | Weekend-2 core |
 | CI (lint + pytest) ‡ | 🟡 Written | Weekend-2 core |
-| Airflow DAG | 🔲 Stub | Weekend-2 core |
+| Airflow DAG § | 🟡 Written | Weekend-2 core |
 | Prefect flow | 🔲 Stub | Later addition |
 | Kubeflow KFP pipeline | 🔲 Stub | Later addition |
 
@@ -188,6 +216,11 @@ version — never just the flag. (Response values above are illustrative.)
 > ‡ The CI workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) is
 > written (ruff + pytest) and passes locally, but has **not** run on a hosted
 > runner yet — the repo has no Git remote — so it is not marked Done.
+>
+> § The Airflow DAG ([`clinops_dag.py`](orchestration/airflow/dags/clinops_dag.py))
+> is implemented and structurally tested (`DagBag`), and every step it wraps is now
+> real (the `promote` step is implemented). It has not yet been run on a live
+> cluster, so it is Written, not Done.
 
 **ML pipeline (built):** ETL → features → models (sklearn + PyTorch) → MLflow registry → BentoML `/predict`, end to end on synthetic data. **Next:** wrap the same `pipeline_tasks` core in an Airflow DAG, then Prefect and Kubeflow, for the orchestrator trade-off comparison.
 

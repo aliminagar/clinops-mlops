@@ -24,6 +24,7 @@ from typing import Any
 from clinops.config import settings
 from clinops.etl import fhir_parser, synthea_loader
 from clinops.features import build_features as feature_builder
+from clinops.registry import promote as registry_promote
 from clinops.training import train as trainer
 
 logger = logging.getLogger(__name__)
@@ -139,9 +140,39 @@ def evaluate(run_refs: dict[str, Any] | None = None) -> dict[str, dict[str, floa
     return {name: block["test"] for name, block in summary["models"].items()}
 
 
-def promote(metrics: Any) -> Any:
-    """Step 6 — run champion/challenger promotion in the MLflow registry."""
-    raise NotImplementedError
+def promote(metrics: Any = None) -> dict[str, Any]:
+    """Step 6 — promote the CV-best champion in the MLflow registry.
+
+    Reads the parent run and registered-model name from the persisted training
+    summary and delegates to :func:`clinops.registry.promote.promote_champion`;
+    no selection logic lives here. Safe and idempotent to run after :func:`train`
+    (the same runs always resolve the same champion).
+
+    Args:
+        metrics: Upstream evaluate output; accepted for orchestrator wiring but
+            unused — the parent run is read from the persisted summary.
+
+    Returns:
+        The champion model name, registry version, and deployed F2 threshold.
+
+    Raises:
+        RuntimeError: If the training summary has no MLflow references (train was
+            run without tracking).
+    """
+    summary = json.loads((settings.reports_dir / "metrics.json").read_text(encoding="utf-8"))
+    mlflow_refs = summary.get("mlflow")
+    if mlflow_refs is None:
+        raise RuntimeError("Training summary has no MLflow references; run train with tracking.")
+
+    result = registry_promote.promote_champion(
+        mlflow_refs["parent_run_id"], mlflow_refs["registered_model"]["name"]
+    )
+    logger.info("Promoted champion %s -> v%s", result.winner, result.version)
+    return {
+        "champion_model": result.winner,
+        "model_version": result.version,
+        "operating_threshold": result.threshold,
+    }
 
 
 def package(champion_version: str | None = None) -> dict[str, Any]:

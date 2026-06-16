@@ -42,6 +42,7 @@ from clinops.models.sklearn_models import (
     scale_pos_weight_from,
 )
 from clinops.models.torch_model import TorchMLPClassifier
+from clinops.registry import promote as registry_promote
 from clinops.serving.proba_model import ProbaModel
 from clinops.training import evaluate, split
 
@@ -57,9 +58,7 @@ DEFAULT_THRESHOLD = 0.5
 
 # The tree model that gets a SHAP summary (TreeExplainer only fits tree models).
 _SHAP_MODEL = "lightgbm"
-# Registry alias the promoted champion is published under.
-CHAMPION_ALIAS = "champion"
-_MLFLOW_ARTIFACT_PATH = "model"
+_MLFLOW_ARTIFACT_PATH = registry_promote.MODEL_ARTIFACT_PATH
 
 
 def continuous_features(features: pd.DataFrame) -> list[str]:
@@ -356,7 +355,6 @@ def run_training(
 
     model_metrics: dict[str, Any] = {}
     test_calibration: dict[str, tuple[Any, Any]] = {}
-    model_uris: dict[str, str] = {}
     registered: dict[str, Any] | None = None
     parent_run_id: str | None = None
 
@@ -401,8 +399,9 @@ def run_training(
                     mlflow.log_params(_mlflow_params(name, block, dataset_info, resolved_seed))
                     mlflow.log_metrics(_mlflow_metrics(block))
                     # Every flavor is logged through the same pyfunc proba wrapper
-                    # so any promoted champion serves identically.
-                    model_uris[name] = _log_proba_model(mlflow, model, data["train"][0])
+                    # so any promoted champion serves identically; promotion later
+                    # re-resolves these logged models from the child runs.
+                    _log_proba_model(mlflow, model, data["train"][0])
                     if shap_path is not None:
                         mlflow.log_artifact(str(shap_path))
 
@@ -427,9 +426,11 @@ def run_training(
             test_calibration, out_reports / "calibration_test.png"
         )
 
-        # Champion/challenger promotion: the winner is the model with the highest
-        # cross-validated PR-AUC, compared apples-to-apples across all flavors.
-        champion_name = max(model_metrics, key=lambda name: model_metrics[name]["cv_train"]["mean"])
+        # Champion/challenger promotion. Selection (highest CV PR-AUC, apples-to-
+        # apples) lives once in registry.promote — used here in-memory for the
+        # summary, and re-resolved from MLflow by promote_champion when tracking.
+        cv_scores = {name: model_metrics[name]["cv_train"]["mean"] for name in model_metrics}
+        champion_name = registry_promote.select_champion(cv_scores)
         champion = {
             "model": champion_name,
             "cv_pr_auc_mean": model_metrics[champion_name]["cv_train"]["mean"],
@@ -439,15 +440,15 @@ def run_training(
 
         mlflow_block: dict[str, Any] | None = None
         if track:
-            version = mlflow.register_model(model_uris[champion_name], reg_name)
-            mlflow.MlflowClient().set_registered_model_alias(
-                reg_name, CHAMPION_ALIAS, version.version
+            assert parent_run_id is not None  # set above whenever track is on
+            promotion = registry_promote.promote_champion(
+                parent_run_id, reg_name, tracking_uri=resolved_uri
             )
             registered = {
                 "name": reg_name,
-                "version": str(version.version),
-                "alias": CHAMPION_ALIAS,
-                "champion_model": champion_name,
+                "version": promotion.version,
+                "alias": registry_promote.CHAMPION_ALIAS,
+                "champion_model": promotion.winner,
             }
             mlflow_block = {
                 "tracking_uri": resolved_uri,

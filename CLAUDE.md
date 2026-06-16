@@ -53,11 +53,17 @@ Keep `pipeline_tasks.py` as the single source of truth throughout.
 Built + tested: ETL, features, 3 models (logreg/lightgbm/torch_mlp), MLflow
 tracking + registry + champion/challenger promotion, F2 threshold selection,
 BentoML /predict serving (flavor-agnostic pyfunc). All docs synced to code+results.
-Champion: logistic_regression, registry v3, F2 threshold 0.813 (promoted on CV PR-AUC).
+Core pipeline now runs END-TO-END: ZERO NotImplementedError in the 7-step DAG path
+(extract->...->package); promotion centralized in registry/promote.py (select on
+CV PR-AUC, register, champion alias; idempotent).
+Airflow DAG written + structurally tested (DagBag; importorskip on Windows) — 🟡
+unrun on a live cluster.
+Champion: logistic_regression via `champion` alias (currently v4, increments per
+promotion), F2 threshold 0.813 (promoted on CV PR-AUC).
 Cohort: Synthea -p 5000 -s 42 (5626 patients, ~3.5% readmission).
-Gates: ruff/mypy/pytest all clean (55 tests).
+Gates: ruff/mypy/pytest all clean (59 passed, 1 skipped).
 
 ## Next up
-1. Airflow orchestrator  2. CI (ci.yml written, unverified until hosted run)
-3. Prefect  4. Kubeflow  5. orchestrator-comparison.md  6. README flip + GitHub push
-Open decision: all three orchestrators vs. ship at two + Kubeflow "planned".
+1. Prefect  2. Kubeflow  3. orchestrator-comparison.md  4. GitHub push
+   (CI verifies itself on push).
+Minor optional: wire run_pipeline()/CLI (convenience entry points, not in the DAG path).

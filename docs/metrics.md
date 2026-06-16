@@ -34,12 +34,15 @@ held-out **test** fold, with 5-fold cross-validated PR-AUC on the **train** fold
 Against the no-skill PR-AUC baseline (= prevalence, **0.035**), the champion's
 0.395 test PR-AUC is a **~11.2× lift** (LightGBM's 0.416 is ~11.7×).
 
-### Champion: logistic regression (registry v3)
+### Champion: logistic regression (`champion` alias)
 
 Promotion is decided on **CV PR-AUC** (chosen before any test-fold peeking), where
-logistic regression edged LightGBM (0.325 vs 0.319). It is registered as
-**`clinops-readmission-classifier` v3** with the `champion` alias, and the
-champion **changed from LightGBM (v2) → logistic regression (v3)** on this run.
+logistic regression edged LightGBM (0.325 vs 0.319). It is published under the
+**`champion` alias** of `clinops-readmission-classifier`, and the champion **flipped
+from LightGBM to logistic regression** once the PyTorch challenger joined the run.
+(Serving resolves the model by alias, not a pinned version; the registry version
+increments on each promotion run — currently v4 — while the champion identity is
+unchanged.)
 
 Honest note: LightGBM actually scored *higher* on the held-out **test** PR-AUC
 (0.416 vs 0.395). The two are within a standard deviation of each other on CV, and
