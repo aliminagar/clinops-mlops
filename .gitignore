@@ -50,8 +50,10 @@ mlartifacts/
 bentoml/
 
 # --- Model / report artifacts (regenerable via `make train`) ---
-models/
-reports/
+# Anchored to repo root so the fitted-model OUTPUT dir is ignored but the
+# source package src/clinops/models/ stays tracked.
+/models/
+/reports/
 
 # --- Synthea jar (downloaded dependency, large) ---
 *.jar
