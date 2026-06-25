@@ -189,6 +189,33 @@ tests `importorskip` Airflow locally and run inside the container / CI.
 > end to end. It is marked _Written_ (not _Done_) only because it has not yet been
 > validated on a live cluster.
 
+## Orchestration — Prefect
+
+The **same** `pipeline_tasks` core is **wrapped, never re-implemented**, by a
+Prefect flow ([`clinops_flow.py`](orchestration/prefect/clinops_flow.py)) — the
+Prefect-idiomatic expression of the identical seven-step graph (extract →
+parse_fhir → build_features → train → evaluate → promote → package). Each step is
+a `@task` wrapping one `pipeline_tasks` function; the `@flow` chains them in order,
+passing each task's output to the next (sequential data passing encodes the linear
+dependency graph the Airflow DAG declares with explicit edges).
+
+```bash
+# Run the flow locally, in-process (no server / deployment needed):
+python orchestration/prefect/clinops_flow.py
+# equivalently:
+make prefect-run
+```
+
+Flow **structure** is validated by [`tests/test_prefect_flow.py`](tests/test_prefect_flow.py)
+(imports the flow and asserts each task wraps a real `pipeline_tasks` callable in
+the right order — it never runs the pipeline). The tests `importorskip` Prefect, so
+they run wherever Prefect is installed; this pass does **not** stand up a Prefect
+server.
+
+> The flow wraps the same fully-implemented core as the Airflow DAG, so it can run
+> end to end. It is marked _Written_ (not _Done_) only because it has not yet been
+> validated on a live run.
+
 ## Roadmap
 
 | Component                                  | Status     | Milestone      |
@@ -203,7 +230,7 @@ tests `importorskip` Airflow locally and run inside the container / CI.
 | BentoML `/predict` serving                 | ✅ Done    | Weekend-2 core |
 | CI (lint + pytest) ‡                       | 🟡 Written | Weekend-2 core |
 | Airflow DAG §                              | 🟡 Written | Weekend-2 core |
-| Prefect flow                               | 🔲 Stub    | Later addition |
+| Prefect flow                               | 🟡 Written | Later addition |
 | Kubeflow KFP pipeline                      | 🔲 Stub    | Later addition |
 
 > † Promotion is implemented and tested in the **training stage**
