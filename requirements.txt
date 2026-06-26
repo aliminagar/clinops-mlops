@@ -27,9 +27,11 @@ boto3            # MinIO / S3 artifact store
 bentoml
 
 # --- Orchestration ---
+# SDKs pinned to known-good majors: unpinned releases are what let a new version
+# silently break CI (the structural tests only run where these are installed).
 apache-airflow
-prefect
-kfp
+prefect>=3.7,<4
+kfp>=2.16,<3
 
 # --- Dev / tooling ---
 ruff

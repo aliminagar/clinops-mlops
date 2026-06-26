@@ -31,9 +31,12 @@ Airflow and Prefect tests do.
 Running this for real requires a container image that has ``clinops`` (and its
 deps) installed — see the README. This module compiles to an IR spec locally
 (``kfp compile``) without a cluster; it is **not** submitted here.
-"""
 
-from __future__ import annotations
+NOTE: this module intentionally does NOT use ``from __future__ import annotations``.
+KFP's ``@dsl.component`` reads each parameter/return annotation at decoration time to
+build the component interface; PEP 563 string annotations break that resolution
+(``str`` arrives as the literal ``'str'`` and is misread as an artifact type).
+"""
 
 from collections.abc import Callable
 from typing import Any
