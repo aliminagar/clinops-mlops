@@ -216,6 +216,47 @@ server.
 > end to end. It is marked _Written_ (not _Done_) only because it has not yet been
 > validated on a live run.
 
+## Orchestration — Kubeflow
+
+The **same** `pipeline_tasks` core is **wrapped, never re-implemented**, by a
+Kubeflow Pipelines (KFP v2) definition
+([`pipeline.py`](orchestration/kubeflow/pipeline.py)) — the KFP-idiomatic
+expression of the identical seven-step graph (extract → parse_fhir →
+build_features → train → evaluate → promote → package). Each step is a
+`@dsl.component` wrapping one `pipeline_tasks` function; one `@dsl.pipeline` wires
+them in order.
+
+**How Kubeflow differs from Airflow/Prefect** (the crux of the comparison): KFP
+components run as **containerized steps** on Kubernetes and pass data across
+container boundaries as **parameters / file artifacts**, not in-process returns.
+Each component is a hermetic function that imports `pipeline_tasks` *inside* the
+container; `Path` returns are stringified (the core already accepts `str` paths),
+and `task.output → next component` is what KFP turns into the cross-container
+dependency graph.
+
+```bash
+# 1. Compile the pipeline to a KFP IR spec locally (no cluster needed):
+python orchestration/kubeflow/pipeline.py   # -> clinops_pipeline.yaml
+
+# 2. (Live run, not required here) Bring up a local kind cluster with the
+#    bundled config, install KFP, then submit the compiled spec:
+kind create cluster --config orchestration/kubeflow/kind-config.yaml
+#    ...install Kubeflow Pipelines, then upload/run clinops_pipeline.yaml via the
+#    KFP UI or `kfp run create`. A real run needs a container image with `clinops`
+#    (and deps) installed — see the module docstring.
+```
+
+Pipeline **structure** is validated by
+[`tests/test_kubeflow_pipeline.py`](tests/test_kubeflow_pipeline.py) (imports the
+module, compiles it to a temp IR, and asserts each component wraps a real
+`pipeline_tasks` callable in the right order — it never submits or runs the
+pipeline). The tests `importorskip` kfp, so they run wherever kfp is installed;
+this pass does **not** stand up a kind cluster.
+
+> The pipeline wraps the same fully-implemented core as the Airflow DAG and
+> compiles to a valid KFP IR. It is marked _Written_ (not _Done_) only because it
+> has not yet been validated on a live cluster.
+
 ## Roadmap
 
 | Component                                  | Status     | Milestone      |
@@ -231,7 +272,7 @@ server.
 | CI (lint + pytest) ‡                       | 🟡 Written | Weekend-2 core |
 | Airflow DAG §                              | 🟡 Written | Weekend-2 core |
 | Prefect flow                               | 🟡 Written | Later addition |
-| Kubeflow KFP pipeline                      | 🔲 Stub    | Later addition |
+| Kubeflow KFP pipeline                      | 🟡 Written | Later addition |
 
 > † Promotion is implemented and tested in the **training stage**
 > ([`training/train.py`](src/clinops/training/train.py) registers the highest-CV-PR-AUC
