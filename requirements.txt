@@ -29,7 +29,10 @@ bentoml
 # --- Orchestration ---
 # SDKs pinned to known-good majors: unpinned releases are what let a new version
 # silently break CI (the structural tests only run where these are installed).
-apache-airflow
+# apache-airflow pinned to the major the CI runner confirmed installable + importable
+# (Airflow 3.x). The structural test builds the DAG from the file (no metadata DB),
+# so it is version-agnostic; the local compose stack still uses the 2.9.0 image.
+apache-airflow>=3,<4
 prefect>=3.7,<4
 kfp>=2.16,<3
 

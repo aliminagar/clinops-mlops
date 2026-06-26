@@ -1,13 +1,20 @@
-"""Structural tests for the Airflow DAG — no live cluster required.
+"""Structural tests for the Airflow DAG — no live cluster, no metadata DB.
 
-Loads the DAG via ``DagBag`` and asserts it cleanly wraps the ``pipeline_tasks``
-core in the correct order, with each task wired to a real core callable. Skipped
-when apache-airflow is not importable (e.g. Windows-native, where Airflow cannot
-run); DAG validation then runs inside the airflow container / CI.
+Builds the DAG straight from the file and asserts it cleanly wraps the
+``pipeline_tasks`` core in the correct order, with each task wired to a real core
+callable.
+
+This deliberately does **not** use ``DagBag.get_dag`` / the metadata DB: on Airflow
+3.x that triggers a ``dag``-table query, which fails on a CI runner where
+``airflow db init`` never ran — a structural test should not need a DB. Loading the
+DAG module directly and reading its in-memory ``dag`` object is DB-free and works on
+both Airflow 2.x and 3.x. Skipped when apache-airflow is not importable (e.g.
+Windows-native); the check then runs in CI / the airflow container.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import types
 from pathlib import Path
 from typing import Any
@@ -34,12 +41,17 @@ EXPECTED_ORDER = [
 
 @pytest.fixture(scope="module")
 def dag() -> Any:
-    from airflow.models import DagBag
-
-    bag = DagBag(dag_folder=str(DAGS_DIR), include_examples=False)
-    assert bag.import_errors == {}, f"DAG import errors: {bag.import_errors}"
-    loaded = bag.get_dag(DAG_ID)
-    assert loaded is not None, f"DAG {DAG_ID!r} not found in {DAGS_DIR}"
+    # Import the DAG module directly and use its in-memory ``dag`` object. This
+    # never touches DagBag or the metadata DB (Airflow 3.x's DagBag.get_dag queries
+    # the ``dag`` table); constructing the DAG + operators is purely in-memory.
+    spec = importlib.util.spec_from_file_location("clinops_dag", DAGS_DIR / "clinops_dag.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # raises if the DAG file has import errors
+    loaded = module.dag
+    assert loaded is not None and loaded.dag_id == DAG_ID, (
+        f"DAG {DAG_ID!r} not built from {DAGS_DIR / 'clinops_dag.py'}"
+    )
     return loaded
 
 
